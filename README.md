@@ -121,27 +121,53 @@ Reference device: Apple M1 (4 P + 4 E cores, 8 GB), macOS 26.5, Apple clang 21,
 `cc -O2`. Harnesses discard a warm-up pass and report best-of-three; the counter
 figures are medians of three sweeps at 40 M increments per thread.
 
-## Three reference devices, and they disagree
+## Four reference devices, and they disagree
 
-| | Apple M1 | Intel Core Ultra 7 265 | Android phone |
-|---|---|---|---|
-| Reported threads | 8 | 20 | 8 |
-| Cores | 4 P + 4 E | 8 P + 12 E | 4 big + 4 little |
-| SMT | none | **none** — Intel removed it from this generation | none |
-| Peak speedup | 5.45× | 14.9× | **3.2–4.2×** |
-| E-core worth, same kernel | **0.50** of a P-core | **0.99** of a P-core | — |
+| | Apple M1 | Intel Core Ultra 7 265 | Intel i5-7300U | Android phone |
+|---|---|---|---|---|
+| Reported threads | 8 | 20 | 4 | 8 |
+| Cores | 4 P + 4 E | 8 P + 12 E | 2 (homogeneous) | 4 big + 4 little |
+| SMT | none | **none** — Intel removed it from this generation | **yes** — 2 cores, 4 threads | none |
+| Peak speedup | 5.45× | 14.9× | 2.75× | **3.2–4.5×** |
+| Halve the cores, fixed threads | — | **1.93×** (no SMT) | **1.38×** (SMT) | — |
+| E-core worth, same kernel | **0.50** of a P-core | **0.99** of a P-core | 1.01 — cores identical | — |
+
+The i5-7300U is a 2017 ultrabook part, and it is in the table because it is the
+low end of what students actually carry and the only device here with SMT.
+
+**It is what makes the SMT lesson measurable.** Halving the physical cores under
+a fixed thread count costs 1.93× on the Core Ultra, which has no SMT, and 1.38×
+here, which does — a control and a treatment on the same test.
+
+**But the sharper finding is that "what is a hyperthread worth" has no single
+answer.** On the same core in the same run, the second hyperthread is worth
+**1.35×** on the compute kernel and **1.89×** on the memory kernel. A thread
+stalled on memory leaves the core's execution units idle, which is precisely the
+gap SMT exists to fill; a thread saturating the floating-point pipeline leaves
+almost nothing to share. That is the same lesson the E-core comparison teaches,
+arrived at from the other side.
 
 **The phone advertises 8 threads and delivers between a third and a half of
-that.** In both sessions the *fifth worker was slower than the fourth*
-(171→203 ms, then 294→342 ms) — the signature of a 4+4 big.LITTLE part. Adding a
-worker cost time, on a device the student owns.
+that.** In all five sessions the *fifth worker was slower than the fourth*
+(171→203, 294→342, 155→196, 172→227, 173→215 ms) — the signature of a 4+4
+big.LITTLE part. Adding a worker cost time, on a device the student owns. It
+reproduces under Firefox as well as Chrome, so it is the hardware and not one
+browser's worker scheduling.
 
 **But the phone is a noisy instrument, and that is the second lesson.** Peak
-speedup was 4.15× in one session and 3.17× in the next, 15 minutes apart on the
-same device — and the second session even showed two workers running *slower*
-than one, which is a noise floor, not a result. Counter-intuitively the run on
-charge was the noisier one; charging heats the phone. Quote what repeats (where
-the curve bends, which worker made things worse), not the milliseconds.
+speedup ranged 3.17× to 4.47× across five sessions on the same device — the
+worst and best only hours apart — and one session even showed two workers
+running *slower* than one, which is a noise floor, not a result.
+Counter-intuitively the run on charge was among the noisier ones; charging heats
+the phone. Quote what repeats (where the curve bends, which worker made things
+worse), not the milliseconds.
+
+**Browser choice does not move any of this.** Chrome, Edge and Firefox agree
+within session noise on the same Windows laptop; Safari and Chrome on the M1
+differ by 0.2% at one worker. What the browser *says* is another matter — Chrome
+reports `Android 10` on an Android 15 handset and `MacIntel` on arm64 silicon.
+The census measures rather than asks, and §1 of the browser lab is where students
+find that out.
 
 **The two laptops disagree about their own E-cores**, which is the other finding.
 `scaling.c`'s compute kernel compiles to a
@@ -152,17 +178,26 @@ separate by 1.43×. **How much a core is worth is a property of the code and the
 chip together, not the chip.**
 
 SMT is measured with a pinned comparison that works whether or not the device has
-it: hold the thread count at 4 and go from 4 physical cores to 2. Without SMT that
-costs a factor of 2, and both reference devices measure it — **1.93×** — which is
-the control the comparison is read against. On a machine with SMT the same
-contrast costs noticeably less, and that gap is the lab's answer.
+it: hold the thread count fixed and halve the physical cores those threads may
+use. Without SMT that costs a factor of 2 — the Core Ultra measures **1.93×**,
+the control. With SMT it costs less, and the shortfall is the answer: the
+i5-7300U measures **1.38×**, so a second thread on a core is worth about a third
+of a second core. Reproduce it on any Windows machine by dropping the two
+prebuilt binaries from
+[Releases](https://github.com/elaheJ/four-ways-to-wait/releases) into
+[windows-laptop/smt-run/](windows-laptop/smt-run/) and double-clicking
+`RUN-ME.bat` — nothing else to install.
 
 Per-device numbers, with the device specification and the command that produced
 each one: [instructor/reference_results.csv](instructor/reference_results.csv)
 (Apple M1), [instructor/reference_results_x86.csv](instructor/reference_results_x86.csv)
-(Intel), [instructor/reference_results_android.csv](instructor/reference_results_android.csv)
-(Android), and [phone/screenshots/](phone/screenshots/) for the phone sessions
-as the student sees them.
+(Intel Core Ultra), [instructor/reference_results_i5.csv](instructor/reference_results_i5.csv)
+(Intel i5-7300U, the SMT device),
+[instructor/reference_results_android.csv](instructor/reference_results_android.csv)
+(Android, all five sessions), [run-log.md](run-log.md) (the browser sweep across
+all four devices), [android/](android/) (per-session writeups), and
+[phone/screenshots/](phone/screenshots/) for the first two phone sessions as the
+student sees them.
 
 ## Running it in a class
 
@@ -172,6 +207,11 @@ Android auto-upgrades a typed address to HTTPS and fails the first time, so the
 `http://` is worth spelling out on the handout. The page also runs from a
 `file://` URL with no server at all, which is how it was verified on Chrome/macOS
 and Edge/Windows.
+
+`python3 -m http.server` sends no cache-control headers, so a device that loaded
+the page in an earlier session can silently re-render the old copy — one of our
+own phone sessions did, and its power state had to be recorded as unknown. Tell
+students to hard-reload before they record anything.
 
 The concept inventory is an outcome-aligned pre/post quiz: eight items, no
 notation, mapped to all ten outcomes.

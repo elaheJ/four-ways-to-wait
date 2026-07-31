@@ -1,0 +1,80 @@
+# i5 / Windows reference measurements for "Four Ways to Wait" (EduHPC-2026).
+# FOURTH device. Companions: reference_results.csv (Apple M1),
+# reference_results_x86.csv (Intel Core Ultra 7 265), reference_results_android.csv.
+#
+# Device: Intel Core i5-7300U "Kaby Lake" @ 2.60 GHz (max 2701 MHz),
+#         2 physical cores / 4 logical processors -- THREADS PER CORE = 2.
+#         Hyper-Threading PRESENT. Homogeneous: no P/E split.
+#         8 GB DDR4-2133 SODIMM. Windows 10/11 x64, laptop on AC.
+#         Measured 30 July 2026 via windows-laptop/smt-run/RUN-ME.bat.
+# Toolchain: mingw-w64 GCC 16.1.0, cross-compiled on the reference Mac,
+#            gcc -O2 -pthread -static. Same GCC major.minor as the Core Ultra
+#            reference, so the two Windows machines are directly comparable.
+#
+# WHY THIS DEVICE EXISTS IN THE STUDY. It is the only machine measured that has
+# SMT, and it is the low end of what students actually carry (a 2017 ultrabook).
+# The other three devices gave the module a control without a treatment; this
+# one supplies the treatment.
+#
+# THE HEADLINE. Hold the thread count at 2 and change only whether those two
+# threads share a physical core:
+#     two threads, two cores (mask 5, CPUs 0+2): 0.251 / 0.271 / 0.232 s
+#     two threads, ONE core  (mask 3, CPUs 0+1): 0.346 / 0.349 / 0.349 s
+#     ratio (same core / different cores): 1.38x median (1.29-1.50)
+# Without SMT that ratio is 2.0 -- the second thread on a core would add nothing.
+# The Core Ultra, which has no SMT, measures 1.93 on the same-shaped test.
+# 1.38 vs 1.93 is the control/treatment pair the paper's census section predicted.
+#
+# EQUIVALENT AND MORE STABLE FRAMING: within the same-core file, going from one
+# thread to two on that single core is a speedup of 1.34 / 1.35 / 1.36 -- a
+# spread of 0.02 across three passes, the tightest number in the entire corpus.
+# The second hyperthread is worth +35% of a core, not +100%.
+#
+# THE SECOND FINDING, and the better lesson. SMT's value depends on the kernel:
+#     compute kernel (FP-latency bound), 2 threads on one core: 1.35x
+#     memory  kernel (bandwidth bound),  2 threads on one core: 1.89x
+# On the memory kernel two threads sharing ONE core get almost what two separate
+# cores get (1.89 vs 1.94). The bandwidth-bound thread stalls waiting on memory
+# and leaves the core's execution units idle, which is exactly the gap SMT fills;
+# the compute kernel keeps the FP pipeline busy, so there is little left to share.
+# This is the SMT-side twin of the E-core finding on the other two machines: how
+# much a hyperthread is worth is a property of the code and the chip together.
+#
+# NOT REPRODUCIBLE / DO NOT QUOTE: absolute times across machines (different
+# silicon and, versus the M1, a different compiler). The 2-thread different-cores
+# time moved 0.232-0.271 s across three passes, which is why the ratio spread is
+# 1.29-1.50 while the same-core speedup barely moves.
+lab,workload,threads,metric,value,unit,note
+0,topology,,physical_cores,2,cores,Win32_Processor NumberOfCores
+0,topology,,logical_processors,4,threads,navigator.hardwareConcurrency agrees: 4
+0,topology,,threads_per_core,2,threads,Hyper-Threading present -- the only such device in the study
+0,topology,,core_classes,1,,homogeneous; no P/E split (contrast M1 4+4 and Core Ultra 8+12)
+0,topology,,max_clock,2701,MHz,base 2600
+0,topology,,sibling_pairing,adjacent,,"CPUs 0+1 are siblings, 2+3 are siblings. Confirmed empirically: mask 3 was slower than mask 5."
+4,smt_2t_2cores,2,time,0.251,s,"mask 5 (CPUs 0+2); one thread per physical core; speedup 1.86x eff 93%"
+4,smt_2t_2cores_run2,2,time,0.271,s,mask 5; repeat
+4,smt_2t_2cores_run3,2,time,0.232,s,mask 5; repeat
+4,smt_2t_1core,2,time,0.346,s,"mask 3 (CPUs 0+1); both threads on ONE core; speedup 1.34x eff 67%"
+4,smt_2t_1core_run2,2,time,0.349,s,mask 3; repeat; speedup 1.35x
+4,smt_2t_1core_run3,2,time,0.349,s,mask 3; repeat; speedup 1.36x
+4,smt_ratio,2,ratio,1.38,x,"THE CONTROLLED MEASUREMENT: 1-core time / 2-core time at fixed 2 threads. Median of 3 (1.29/1.38/1.50). 2.0 = second thread on a core adds nothing. Core Ultra, no SMT, measures 1.93 on the same-shaped test."
+4,smt_gain_compute,2,speedup,1.35,x,"median of 1.34/1.35/1.36 -- the second hyperthread is worth +35% of a core on the compute kernel"
+4,smt_gain_memory,2,speedup,1.89,x,"same single core, memory kernel: 1.89x vs 1.94x for two separate cores. SMT nearly free here -- see header."
+4,smt_workload_gap,,ratio,1.40,x,"1.89 / 1.35 -- how much the answer to 'what is a hyperthread worth' moves with the kernel, on one core, one chip, one run"
+4,scaling_compute,1,time,0.465,s,baseline; unpinned; run 1 of 3
+4,scaling_compute,2,speedup,1.75,x,efficiency 88%; runs 2-3 gave 2.05x and 1.76x
+4,scaling_compute,3,speedup,2.26,x,efficiency 75%
+4,scaling_compute,4,speedup,2.68,x,"efficiency 67%; PEAK in all three passes (2.68 / 2.72 / 2.84)"
+4,scaling_compute,5,speedup,2.42,x,efficiency 48%; past the logical processor count
+4,scaling_compute,6,speedup,2.37,x,efficiency 40%
+4,scaling_compute,8,speedup,2.35,x,"efficiency 29%; runs 2-3 gave 2.45x and 2.73x"
+4,scaling_bend,,bend_thread_count,4,threads,"equals the LOGICAL processor count, not the physical core count of 2. All three passes peak at 4."
+4,scaling_peak,,peak_speedup,2.75,x,"median of 2.68/2.72/2.84 on a machine reporting 4 threads over 2 cores. Browser sweep on the same laptop gave 2.9-3.3x."
+4,scaling_memory,1,bandwidth,6.4,GB/s,512 MiB streaming reduction
+4,scaling_memory,2,bandwidth,12.5,GB/s,speedup 1.95x
+4,scaling_memory,3,bandwidth,14.9,GB/s,speedup 2.33x; effectively saturated from here
+4,scaling_memory,4,bandwidth,15.3,GB/s,PEAK
+4,scaling_memory,8,bandwidth,14.5,GB/s,no further gain
+4,pcore_compute,1,time,0.4643,s,"probe.c pinned to CPU 0; fp 430.7 Mops, int 866.4 Mops"
+4,pcore_compute_cpu2,1,time,0.4599,s,"probe.c pinned to CPU 2, the other physical core; fp 434.8 Mops, int 869.5 Mops"
+4,core_ratio,1,ratio,1.01,x,"CPU2 / CPU0 on both chains. The two cores are IDENTICAL to within 1%. Contrast the M1 (0.50) and the Core Ultra (0.99 FP but 1.43 integer): this is the module's homogeneous baseline, where 'what is a core worth' has one answer instead of two."

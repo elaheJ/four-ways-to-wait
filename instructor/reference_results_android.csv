@@ -2,27 +2,61 @@
 # Third device, alongside reference_results.csv (Apple M1) and
 # reference_results_x86.csv (Intel Core Ultra 7 265).
 #
-# Device: Android 10, armv81 (ARMv8.1), 8 logical cores reported by
-#         navigator.hardwareConcurrency. Chrome 150.0.0.0 Mobile.
-#         navigator.deviceMemory: NOT reported by this build.
+# Device: Android 15, armv81 (ARMv8.1), 8 logical cores reported by
+#         navigator.hardwareConcurrency.
+#         navigator.deviceMemory: NOT reported by either browser.
 #         Page served over LAN from the reference Mac (http://<host>:8000/threads.html).
-#         Measured 30 July 2026. TWO sessions: run 1 on battery (60%),
-#         run 2 on charge (57%). Both are recorded below.
+#         Measured 30 July 2026. FIVE sessions, all recorded below:
+#           run 1  Chrome 150   on battery (60%)
+#           run 2  Chrome 150   on charge (57%)
+#           run 3  Chrome 150   power state UNKNOWN -- rendered a stale cached
+#                               page revision; see CAUTION below
+#           run 4  Firefox 153  first non-Chromium run
+#           run 5  Chrome 150   clean re-run on the current page revision
+#
+# OS VERSION, corrected 30 July 2026. This file previously said "Android 10".
+# That was Chrome's user agent, "(Linux; Android 10; K)", in which Chrome freezes
+# the Android version at 10 and replaces the model with the literal letter K as a
+# fingerprinting countermeasure. Firefox on the same handset reports
+# "(Android 15; Mobile; rv:153.0)". The device runs Android 15. Two browsers on
+# one phone disagree about the OS and the more specific-looking string is the
+# fabricated one -- a section 1 teaching point, alongside the M1 reporting
+# "MacIntel" and "Intel Mac OS X 10_15_7" on arm64.
 #
 # THE HEADLINE, and what survives repetition. The phone reports 8 threads and
-# peaks at 3.17x-4.15x. It never comes close to 8. In BOTH sessions the fifth
-# worker was slower in absolute terms than the fourth (171->203 ms run 1,
-# 294->342 ms run 2), which is the signature of a 4+4 big.LITTLE part: the first
-# four workers get the big cores, the fifth gets a little one, and the even split
-# hands it the same work anyway.
+# peaks at 3.17x-4.47x. It never comes close to 8. In ALL FIVE sessions the fifth
+# worker was slower in absolute terms than the fourth:
+#     run 1  171->203 ms (+19%)      run 4  172->227 ms (+32%, Firefox)
+#     run 2  294->342 ms (+16%)      run 5  173->215 ms (+24%)
+#     run 3  155->196 ms (+26%)
+# That is the signature of a 4+4 big.LITTLE part: the first four workers get the
+# big cores, the fifth gets a little one, and the even split hands it the same
+# work anyway. Critically it reproduces on Gecko as well as Blink (run 4), so it
+# is the hardware, not a Chromium worker-scheduling artifact.
 #
 # WHAT DOES NOT REPRODUCE, and must not be quoted as if it did:
-#   - the magnitudes. Peak 4.15x (run 1) vs 3.17x (run 2) -- a spread of 1.31x on
-#     the same device, same page, 15 minutes apart.
-#   - the chunk-size ordering in section 3. Run 1: chunk 64 beat chunk 8.
-#     Run 2: chunk 8 beat chunk 64. It is noise; do not build a lesson on it.
+#   - the magnitudes. Peaks 4.15x / 3.17x / 4.02x / 3.95x / 4.47x -- a spread of
+#     1.41x on the same device and page. (This file previously quoted 1.31x from
+#     the first two sessions alone; five sessions widen it.)
+#   - the chunk-size ordering in section 3. Chunk 64 leads in 4 of 5 sessions,
+#     but run 2 reverses it and run 4 is a 1% tie. A 4-of-5 split is not
+#     significant (sign test, one-sided p ~ 0.19) and the margins sit inside the
+#     device's noise floor. Still noise; do not build a lesson on it.
+#   - the SIZE of dynamic's win over block: 1.04x to 1.45x across five sessions
+#     with no pattern. Report THAT dynamic wins, never by how much.
 #   - run 2 shows 2 workers SLOWER than 1 (606 -> 647 ms). Nothing structural
 #     causes that; it is the noise floor of the device.
+#   - any Chrome-vs-Firefox speed difference. Chrome's own 1-worker baseline
+#     spans 527-606 ms across its four sessions; Firefox's 600 ms sits inside
+#     that range, 1.2% from run 5's Chrome. An engine gap cannot be resolved
+#     above this device's noise.
+#
+# CAUTION on run 3: it rendered a superseded revision of threads.html -- the one
+# still advising "plug the phone in" -- almost certainly a Chrome HTTP cache hit,
+# since python3 -m http.server sends no cache-control headers. Its power state is
+# therefore unknown (the page told the user to charge). Its structural results
+# agree with every other session, but do not cite its power state. Hard-reload on
+# the device before recording future sessions.
 #
 # COUNTER-INTUITIVE: run 2 was on charge and was the NOISIER of the two.
 # Charging heats the phone. The handout's original "plug it in" advice has been
@@ -32,8 +66,9 @@
 # Not robust: any particular millisecond.
 lab,workload,threads,metric,value,unit,note
 0,topology,,reported_threads,8,threads,navigator.hardwareConcurrency
-0,topology,,platform,armv81,,"Linux armv81; Android 10; Chrome 150 Mobile"
-0,topology,,device_memory,,,not reported by this Chrome build
+0,topology,,platform,armv81,,"Linux armv81; Android 15 (per Firefox UA); Chrome 150 Mobile / Firefox 153"
+0,topology,,os_version,15,,"Android 15. Chrome's UA claims 10 -- frozen for fingerprinting resistance. See header."
+0,topology,,device_memory,,,not reported by either browser
 4,scaling_browser,1,time,531,ms,baseline
 4,scaling_browser,2,speedup,1.73,x,efficiency 87%
 4,scaling_browser,3,speedup,2.57,x,efficiency 86%
@@ -61,13 +96,55 @@ lab,workload,threads,metric,value,unit,note
 4,scaling_browser_run2,2,speedup,0.94,x,"647 ms -- SLOWER THAN ONE WORKER. Noise floor, not a result."
 4,scaling_browser_run2,3,speedup,1.42,x,426 ms
 4,scaling_browser_run2,4,speedup,2.06,x,294 ms; local knee again
-4,scaling_browser_run2,5,speedup,1.77,x,342 ms -- slower than 4 workers, as in run 1
+4,scaling_browser_run2,5,speedup,1.77,x,"342 ms -- slower than 4 workers, as in run 1"
 4,scaling_browser_run2,8,speedup,2.79,x,217 ms; at the reported thread count
 4,scaling_browser_run2,10,speedup,3.17,x,191 ms -- PEAK (run 1 peaked at 4.15x)
 4,scaling_browser_run2,16,speedup,2.59,x,234 ms
-4,scaling_peak_run2,,peak_speedup,3.17,x,vs 4.15x in run 1; spread 1.31x between sessions
+4,scaling_peak_run2,,peak_speedup,3.17,x,"vs 4.15x in run 1. LOWEST of the five sessions; the full spread is 1.41x (3.17x-4.47x), not the 1.31x this file once quoted from runs 1-2 alone."
 2,imbalance_browser_block_run2,8,makespan,1131,ms,busiest 1076 idlest 74; imbalance 1.74 (run 1: 1.48)
 2,imbalance_browser_dyn64_run2,8,makespan,1083,ms,imbalance 1.13; only 1.04x over block
 2,imbalance_browser_dyn8_run2,8,makespan,1023,ms,"imbalance 1.05; 1.11x over block. BEATS chunk 64 here; in run 1 it lost to it. Ordering is noise."
 1,taskgraph_browser_run2,3,makespan,2769,ms,speedup 1.88x
 1,taskgraph_browser_run2,8,makespan,2780,ms,"speedup 1.87x -- identical to run 1 and to both laptops. The span bound is the one number on this device that does not move."
+# ---- run 3, Chrome 150, power state UNKNOWN (stale cached page revision) ----
+# Full writeup: ../android/session3-chrome-2026-07-30.md
+4,scaling_browser_run3,1,time,527,ms,baseline
+4,scaling_browser_run3,4,speedup,3.40,x,155 ms; efficiency 85%; the knee
+4,scaling_browser_run3,5,speedup,2.69,x,196 ms -- slower than 4 workers (155 ms). Third session running.
+4,scaling_browser_run3,8,speedup,3.70,x,142 ms; efficiency 46%; at the reported thread count
+4,scaling_browser_run3,13,speedup,4.02,x,131 ms -- PEAK
+4,scaling_browser_run3,16,speedup,3.98,x,132 ms
+4,scaling_peak_run3,,peak_speedup,4.02,x,between run 1 (4.15x) and run 2 (3.17x)
+2,imbalance_browser_block_run3,8,makespan,859,ms,busiest 820 idlest 108; imbalance 2.07 -- worst block imbalance recorded on this device
+2,imbalance_browser_dyn64_run3,8,makespan,594,ms,imbalance 1.06; 1.45x over block -- largest dynamic win of the five sessions
+2,imbalance_browser_dyn8_run3,8,makespan,633,ms,imbalance 1.03; 1.36x over block. Chunk 64 leads again.
+1,taskgraph_browser_run3,3,makespan,2772,ms,speedup 1.88x
+1,taskgraph_browser_run3,8,makespan,2787,ms,speedup 1.87x
+# ---- run 4, FIREFOX 153 (Gecko) -- first non-Chromium run on this device ----
+# Full writeup: ../android/session4-firefox-2026-07-30.md
+4,scaling_browser_run4,1,time,600,ms,baseline; Firefox 153 on Android 15
+4,scaling_browser_run4,4,speedup,3.49,x,172 ms; efficiency 87%; the knee
+4,scaling_browser_run4,5,speedup,2.64,x,"227 ms -- slower than 4 workers (172 ms), +32%, the largest penalty of the five. REPRODUCES ON GECKO: the regression is hardware, not a Chromium artifact."
+4,scaling_browser_run4,8,speedup,3.80,x,158 ms; efficiency 47%
+4,scaling_browser_run4,9,speedup,3.95,x,152 ms -- PEAK
+4,scaling_browser_run4,16,speedup,3.77,x,159 ms
+4,scaling_peak_run4,,peak_speedup,3.95,x,within the Chrome session range; no engine effect resolvable
+2,imbalance_browser_block_run4,8,makespan,798,ms,busiest 785 idlest 238; imbalance 1.69
+2,imbalance_browser_dyn64_run4,8,makespan,671,ms,imbalance 1.09; 1.19x over block
+2,imbalance_browser_dyn8_run4,8,makespan,677,ms,"imbalance 1.03; 1.18x over block -- a 1% tie with chunk 64, not a ranking"
+1,taskgraph_browser_run4,3,makespan,2759,ms,speedup 1.88x
+1,taskgraph_browser_run4,8,makespan,2757,ms,"speedup 1.89x -- the span bound holds on a third engine (Blink, WebKit, now Gecko)"
+# ---- run 5, Chrome 150, current page revision (supersedes run 3) ----
+# Full writeup: ../android/session5-chrome-2026-07-30.md
+4,scaling_browser_run5,1,time,593,ms,"baseline; 1.2% from Firefox's 600 ms -- see header, no engine gap is resolvable"
+4,scaling_browser_run5,4,speedup,3.44,x,173 ms; efficiency 86%; the knee
+4,scaling_browser_run5,5,speedup,2.76,x,215 ms -- slower than 4 workers (173 ms). Five for five.
+4,scaling_browser_run5,8,speedup,4.13,x,144 ms; efficiency 52%; at the reported thread count
+4,scaling_browser_run5,15,speedup,4.47,x,133 ms -- PEAK; highest recorded on this device
+4,scaling_browser_run5,16,speedup,3.87,x,153 ms
+4,scaling_peak_run5,,peak_speedup,4.47,x,"HIGHEST of the five sessions; sets the top of the 1.41x spread"
+2,imbalance_browser_block_run5,8,makespan,847,ms,busiest 815 idlest 54; imbalance 1.86
+2,imbalance_browser_dyn64_run5,8,makespan,650,ms,imbalance 1.06; 1.30x over block
+2,imbalance_browser_dyn8_run5,8,makespan,686,ms,imbalance 1.03; 1.23x over block. Chunk 64 leads (4th time in 5).
+1,taskgraph_browser_run5,3,makespan,2769,ms,speedup 1.88x
+1,taskgraph_browser_run5,8,makespan,2796,ms,"speedup 1.86x. Across all five sessions the span bound sits in 1.86x-1.89x -- the one number on this device that does not move."
