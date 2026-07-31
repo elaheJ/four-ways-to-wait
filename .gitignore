@@ -14,3 +14,6 @@ __pycache__/
 
 # Instructor answer key — deliberately NOT published; see instructor/concept-inventory.md
 instructor/concept-inventory.md
+
+# Transfer artifacts from moving results between machines
+*.zip

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threads on Your Phone</title>
+<style>
+  :root { color-scheme: light dark; --fg:#111; --bg:#fff; --mut:#666; --line:#ccc; --hi:#0b6; }
+  @media (prefers-color-scheme: dark){ :root{ --fg:#eee; --bg:#111; --mut:#999; --line:#444; } }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 1rem; max-width: 46rem;
+         color: var(--fg); background: var(--bg); }
+  h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 2rem; }
+  p.note { color: var(--mut); font-size: .9rem; }
+  button { font: inherit; padding: .5rem 1rem; border: 1px solid var(--line); border-radius: 6px;
+           background: transparent; color: inherit; }
+  button[disabled] { opacity: .4; }
+  table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: .25rem .4rem; border-bottom: 1px solid var(--line); font-size: .9rem; }
+  th:first-child, td:first-child { text-align: left; }
+  .bar { display:inline-block; height:.6rem; background: var(--hi); vertical-align: middle; }
+  code { font-size: .85em; }
+  .out { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>Threads on Your Phone</h1>
+<p class="note">Nothing is downloaded and nothing is sent anywhere. Every number below is
+measured on the device you are holding. Keep the screen on and the browser in front,
+or the numbers are meaningless. <strong>Run each section at least twice.</strong> A phone
+is a real machine but a noisy instrument — we measured the same device 1.3× apart
+between two sessions, and charging it made things noisier, not steadier. Trust what
+repeats: where the curve bends, and which worker made things worse. Not the milliseconds.</p>
+
+<h2>1. What did you bring?</h2>
+<div id="census" class="out">hardwareConcurrency : 4 threads
+deviceMemory        : not reported
+platform            : Win32
+user agent          : Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0</div>
+<p class="note"><code>hardwareConcurrency</code> is the number of threads the browser will
+let you run. Whether that is also the number of cores, and whether those cores are the
+same as each other, is what the rest of this page is for.</p>
+
+<h2>2. Does one more thread do one more thread's work?</h2>
+<p class="note">The same fixed amount of arithmetic, split evenly across 1, 2, 3, … workers.
+If threads were free, the bar would double every time you double the workers.</p>
+<button id="runScale">Run scaling sweep</button>
+<div id="scaleOut"><table><thead><tr><th>workers</th><th>time</th><th>speedup</th><th>efficiency</th><th></th></tr></thead><tbody><tr><td>1</td><td>1198 ms</td><td>1.00×</td><td>100%</td><td><span class="bar" style="width:11.3%"></span></td></tr><tr><td>2</td><td>622 ms</td><td>1.93×</td><td>96%</td><td><span class="bar" style="width:21.7%"></span></td></tr><tr><td>3</td><td>425 ms</td><td>2.82×</td><td>94%</td><td><span class="bar" style="width:31.7%"></span></td></tr><tr><td>4</td><td>421 ms</td><td>2.85×</td><td>71%</td><td><span class="bar" style="width:32.0%"></span></td></tr><tr><td>5</td><td>2240 ms</td><td>0.53×</td><td>11%</td><td><span class="bar" style="width:6.0%"></span></td></tr><tr><td>6</td><td>4446 ms</td><td>0.27×</td><td>4%</td><td><span class="bar" style="width:3.0%"></span></td></tr><tr><td>7</td><td>418 ms</td><td>2.87×</td><td>41%</td><td><span class="bar" style="width:32.2%"></span></td></tr><tr><td>8</td><td>367 ms</td><td>3.26×</td><td>41%</td><td><span class="bar" style="width:36.7%"></span></td></tr></tbody></table><p class="note">Perfect scaling would read 8.00× and 100% on the last row.
+       Write down the worker count where the speedup column stops climbing, and compare it
+       with your 4 reported threads.</p></div>
+
+<h2>3. The same loop, handed out two different ways</h2>
+<p class="note">4096 iterations where iteration <em>i</em> costs about <em>i</em> — the last one
+is thousands of times more expensive than the first. Same total work both times.
+<strong>Block</strong> cuts the range into contiguous slabs up front. <strong>Dynamic</strong>
+makes each worker come back for a small chunk whenever it runs out.</p>
+<button id="runSched">Run both schedules</button>
+<div id="schedOut"><table><thead><tr><th>schedule</th><th>makespan</th><th>busiest</th><th>idlest</th><th>imbalance</th><th>vs block</th></tr></thead><tbody><tr><td>block (static)</td><td>2665 ms</td><td>2625</td><td>442</td><td>1.72</td><td>1.00×</td></tr><tr><td>dynamic, chunk 64</td><td>1599 ms</td><td>1576</td><td>1531</td><td>1.02</td><td>1.67×</td></tr><tr><td>dynamic, chunk 8</td><td>1502 ms</td><td>1446</td><td>1372</td><td>1.04</td><td>1.77×</td></tr></tbody></table><p class="note">4 workers. Imbalance is the busiest worker divided by the average;
+     1.00 means everyone worked the same amount. Nobody did less work under dynamic —
+     they just stopped waiting on each other.</p></div>
+
+<h2>4. Where the arrows say no</h2>
+<p class="note">Ten tasks with prerequisites. Adding workers stops helping once the makespan
+reaches the longest chain, no matter how many workers you have.</p>
+<button id="runGraph">Run task graph</button>
+<div id="graphOut"><p class="note">work T<sub>1</sub> = 5200 ms &nbsp;|&nbsp; span T<sub>∞</sub> = 2750 ms
+       &nbsp;|&nbsp; most parallelism worth buying = 1.9 workers</p><table><thead><tr><th>workers</th><th>makespan</th><th>lower bound</th><th>speedup</th><th>efficiency</th></tr></thead><tbody><tr><td>1</td><td>5210 ms</td><td>5200 ms</td><td>1.00×</td><td>100%</td></tr><tr><td>2</td><td>3455 ms</td><td>2750 ms</td><td>1.51×</td><td>75%</td></tr><tr><td>3</td><td>2752 ms</td><td>2750 ms</td><td>1.89×</td><td>63%</td></tr><tr><td>4</td><td>2766 ms</td><td>2750 ms</td><td>1.88×</td><td>47%</td></tr><tr><td>6</td><td>2756 ms</td><td>2750 ms</td><td>1.89×</td><td>31%</td></tr><tr><td>8</td><td>2754 ms</td><td>2750 ms</td><td>1.89×</td><td>24%</td></tr></tbody></table></div>
+
+<script>
+// ---------- worker body: shipped as a Blob so this file stands alone offline ----------
+const WORKER_SRC = `
+function burn(reps){ let s=0; for(let k=0;k<reps;k++) s += (k & 255) * 1.000001; return s; }
+let sink = 0;
+onmessage = (e) => {
+  const m = e.data;
+  if (m.job === 'compute') {                    // fixed slice of a fixed total
+    const t0 = performance.now();
+    sink += burn(m.reps);
+    postMessage({ done: 'compute', ms: performance.now() - t0 });
+  } else if (m.job === 'chunk') {               // [lo,hi) of the lopsided loop
+    const t0 = performance.now();
+    for (let i = m.lo; i < m.hi; i++) sink += burn(i * 250);
+    postMessage({ done: 'chunk', ms: performance.now() - t0, n: m.hi - m.lo });
+  } else if (m.job === 'task') {                // a task-graph node of known duration
+    const end = performance.now() + m.ms;
+    while (performance.now() < end) sink += burn(2000);
+    postMessage({ done: 'task', name: m.name });
+  }
+};
+`;
+const BLOB = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' }));
+const spawn = (n) => Array.from({ length: n }, () => new Worker(BLOB));
+const kill  = (ws) => ws.forEach(w => w.terminate());
+const el    = (id) => document.getElementById(id);
+
+// ---------- 1. census ----------
+const HC = navigator.hardwareConcurrency || 4;
+el('census').textContent =
+  `hardwareConcurrency : ${HC} threads\n` +
+  `deviceMemory        : ${navigator.deviceMemory ? navigator.deviceMemory + ' GB (rounded)' : 'not reported'}\n` +
+  `platform            : ${navigator.platform || 'not reported'}\n` +
+  `user agent          : ${navigator.userAgent}`;
+
+function table(head, rows) {
+  const th = head.map(h => `<th>${h}</th>`).join('');
+  const tr = rows.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('');
+  return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+}
+const bar = (frac) => `<span class="bar" style="width:${Math.max(1, frac * 90).toFixed(1)}%"></span>`;
+
+// ---------- 2. scaling sweep ----------
+const TOTAL_REPS = 500e6;  // fixed total work, split across workers
+
+// Starting a worker costs milliseconds. Start the pool first, wake every worker
+// with a token job, and only then start the clock -- otherwise the sweep measures
+// worker startup rather than parallelism. Real thread pools exist for this reason.
+function poolRound(ws, reps_each) {
+  return new Promise(res => {
+    let left = ws.length;
+    const t0 = performance.now();
+    ws.forEach(w => {
+      w.onmessage = () => { if (--left === 0) res(performance.now() - t0); };
+      w.postMessage({ job: 'compute', reps: reps_each });
+    });
+  });
+}
+
+async function computeRound(p) {
+  const ws = spawn(p);
+  // Warm the pool AND let the JIT fully optimise burn() before the clock starts.
+  // Too small a warm-up here leaves the 1-worker baseline running interpreted,
+  // which makes every later row look better than it is -- efficiencies above
+  // 100% in this table are the symptom.
+  await poolRound(ws, 5e6);
+  const ms = Math.min(await poolRound(ws, Math.round(TOTAL_REPS / p)),
+                      await poolRound(ws, Math.round(TOTAL_REPS / p)));
+  kill(ws);
+  return ms;
+}
+
+el('runScale').onclick = async (e) => {
+  e.target.disabled = true;
+  const out = el('scaleOut');
+  // Must go past the core count or the bend has nowhere to appear: a 20-core
+  // machine capped at 16 workers is still climbing when the sweep ends.
+  const maxp = Math.min(2 * HC, 32), rows = [];
+  let t1 = 0;
+  for (let p = 1; p <= maxp; p++) {
+    const ms = await computeRound(p);
+    if (p === 1) t1 = ms;
+    const su = t1 / ms;
+    rows.push([p, ms.toFixed(0) + ' ms', su.toFixed(2) + '×',
+               (su / p * 100).toFixed(0) + '%', bar(su / maxp)]);
+    out.innerHTML = table(['workers', 'time', 'speedup', 'efficiency', ''], rows) +
+      `<p class="note">Perfect scaling would read ${maxp}.00× and 100% on the last row.
+       Write down the worker count where the speedup column stops climbing, and compare it
+       with your ${HC} reported threads.</p>`;
+    await new Promise(r => setTimeout(r, 60));
+  }
+  e.target.disabled = false;
+};
+
+// ---------- 3. static block vs dynamic self-scheduling ----------
+const N = 4096;
+
+function blockRun(p) {
+  return new Promise(res => {
+    const ws = spawn(p), busy = new Array(p).fill(0), per = Math.floor(N / p);
+    let left = p; const t0 = performance.now();
+    ws.forEach((w, k) => {
+      w.onmessage = (ev) => { busy[k] += ev.data.ms; if (--left === 0) { kill(ws); res({ ms: performance.now() - t0, busy }); } };
+      w.postMessage({ job: 'chunk', lo: k * per, hi: k === p - 1 ? N : (k + 1) * per });
+    });
+  });
+}
+
+function dynamicRun(p, chunk) {
+  return new Promise(res => {
+    // The main thread is the work queue. A worker gets more only when it asks.
+    const ws = spawn(p), busy = new Array(p).fill(0);
+    let next = 0, active = p; const t0 = performance.now();
+    const give = (w, k) => {
+      if (next >= N) { active--; if (active === 0) { kill(ws); res({ ms: performance.now() - t0, busy }); } return; }
+      const lo = next; next = Math.min(N, next + chunk);
+      w.postMessage({ job: 'chunk', lo, hi: next });
+    };
+    ws.forEach((w, k) => { w.onmessage = (ev) => { busy[k] += ev.data.ms; give(w, k); }; give(w, k); });
+  });
+}
+
+el('runSched').onclick = async (e) => {
+  e.target.disabled = true;
+  const p = Math.max(2, Math.min(HC, 8));
+  const runs = [['block (static)', await blockRun(p)],
+                ['dynamic, chunk 64', await dynamicRun(p, 64)],
+                ['dynamic, chunk 8', await dynamicRun(p, 8)]];
+  const base = runs[0][1].ms;
+  el('schedOut').innerHTML = table(
+    ['schedule', 'makespan', 'busiest', 'idlest', 'imbalance', 'vs block'],
+    runs.map(([name, r]) => {
+      const avg = r.busy.reduce((a, b) => a + b, 0) / p;
+      const mx = Math.max(...r.busy), mn = Math.min(...r.busy);
+      return [name, r.ms.toFixed(0) + ' ms', mx.toFixed(0), mn.toFixed(0),
+              (mx / avg).toFixed(2), (base / r.ms).toFixed(2) + '×'];
+    })) +
+    `<p class="note">${p} workers. Imbalance is the busiest worker divided by the average;
+     1.00 means everyone worked the same amount. Nobody did less work under dynamic —
+     they just stopped waiting on each other.</p>`;
+  e.target.disabled = false;
+};
+
+// ---------- 4. task graph ----------
+const G = {
+  checkout:{d:300,deps:[]}, compile_a:{d:900,deps:['checkout']}, compile_b:{d:600,deps:['checkout']},
+  compile_c:{d:450,deps:['checkout']}, compile_d:{d:450,deps:['checkout']},
+  link:{d:400,deps:['compile_a','compile_b','compile_c','compile_d']},
+  unit_test:{d:800,deps:['link']}, docs:{d:700,deps:['checkout']}, lint:{d:250,deps:['checkout']},
+  package:{d:350,deps:['unit_test','docs','lint']}
+};
+const work = Object.values(G).reduce((a, t) => a + t.d, 0);
+const spanMemo = {};
+const span = (n) => spanMemo[n] ??= G[n].d + Math.max(0, ...G[n].deps.map(span));
+const T_INF = Math.max(...Object.keys(G).map(span));
+
+function graphRun(p) {
+  return new Promise(res => {
+    const NAMES = Object.keys(G);
+    const left = {}, kids = {};
+    for (const n of NAMES) { left[n] = G[n].deps.length; kids[n] = []; }
+    for (const n of NAMES) for (const d of G[n].deps) kids[d].push(n);
+
+    const ready = NAMES.filter(n => left[n] === 0);   // the ready list
+    const ws = spawn(p);
+    const idle = new Set(ws);                         // workers with nothing to do
+    let done = 0;
+    const t0 = performance.now();
+
+    // Hand out whatever is ready to whoever is free. This is the whole scheduler.
+    const dispatch = () => {
+      for (const w of [...idle]) {
+        if (!ready.length) break;
+        idle.delete(w);
+        const n = ready.shift();
+        w.postMessage({ job: 'task', name: n, ms: G[n].d });
+      }
+    };
+
+    ws.forEach(w => {
+      w.onmessage = (ev) => {
+        idle.add(w);
+        for (const c of kids[ev.data.name]) if (--left[c] === 0) ready.push(c);
+        if (++done === NAMES.length) { kill(ws); return res(performance.now() - t0); }
+        dispatch();
+      };
+    });
+    dispatch();
+  });
+}
+
+el('runGraph').onclick = async (e) => {
+  e.target.disabled = true;
+  const rows = [];
+  for (const p of [1, 2, 3, 4, 6, 8]) {
+    const ms = await graphRun(p);
+    rows.push([p, ms.toFixed(0) + ' ms', Math.max(work / p, T_INF).toFixed(0) + ' ms',
+               (work / ms).toFixed(2) + '×', (work / ms / p * 100).toFixed(0) + '%']);
+    el('graphOut').innerHTML =
+      `<p class="note">work T<sub>1</sub> = ${work} ms &nbsp;|&nbsp; span T<sub>∞</sub> = ${T_INF} ms
+       &nbsp;|&nbsp; most parallelism worth buying = ${(work / T_INF).toFixed(1)} workers</p>` +
+      table(['workers', 'makespan', 'lower bound', 'speedup', 'efficiency'], rows);
+    await new Promise(r => setTimeout(r, 60));
+  }
+  e.target.disabled = false;
+};
+</script>
+
+
+</body></html>

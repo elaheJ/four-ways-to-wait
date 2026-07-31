@@ -1,0 +1,3 @@
+threads,compute_s,compute_speedup,compute_eff,memory_GBs,memory_speedup,memory_eff
+1,0.476,1.00,1.00,6.5,1.00,1.00
+2,0.349,1.36,0.68,11.7,1.81,0.91

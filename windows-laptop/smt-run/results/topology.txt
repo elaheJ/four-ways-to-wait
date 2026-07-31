@@ -1,0 +1,9 @@
+
+
+Name                      : Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz
+NumberOfCores             : 2
+NumberOfLogicalProcessors : 4
+MaxClockSpeed             : 2701
+
+
+
