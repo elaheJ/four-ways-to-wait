@@ -1,0 +1,90 @@
+# x86 / Windows reference measurements for "Four Ways to Wait" (EduHPC-2026 short paper).
+# Companion to reference_results.csv (Apple M1). Same schema; append or keep separate.
+# Device: Intel Core Ultra 7 265 "Arrow Lake-S" (Family 6 Model 198 Stepping 2),
+#         20 physical cores / 20 logical processors, THREADS PER CORE = 1 (no SMT --
+#         the Core Ultra 200S generation has no Hyper-Threading to disable),
+#         hybrid: 8 P-cores (base 2400 MHz) + 12 E-cores (base 1800 MHz),
+#         16 GB, Windows 11 Enterprise 10.0.26200, desktop on AC,
+#         power mode Ultimate Performance.
+# Toolchain: portable WinLibs MinGW-w64 GCC 16.1.0 (UCRT, POSIX threads),
+#            gcc -O2 -pthread -static. No WSL available on this machine.
+# Timings are wall clock, CLOCK_MONOTONIC. Harnesses discard a warm-up pass and
+# report best-of-three unless noted. Measured 30 July 2026.
+#
+# CAUTION: absolute compute times are NOT comparable to the M1 rows -- different
+# compiler on a serial FP dependency chain. Ratios are within-machine and are safe.
+#
+# CPU numbering is not P-cores-first:
+#   P-cores = CPUs 0,1,6,7,8,9,18,19    E-cores = CPUs 2,3,4,5,10,11,12,13,14,15,16,17
+lab,workload,threads,metric,value,unit,note
+0,topology,,physical_cores,20,cores,GetLogicalProcessorInformationEx RelationProcessorCore
+0,topology,,logical_processors,20,threads,navigator.hardwareConcurrency agrees: 20
+0,topology,,threads_per_core,1,threads,LTP_PC_SMT flag clear on all 20 core records
+0,topology,,p_cores,8,cores,EfficiencyClass 1; base 2400 MHz
+0,topology,,e_cores,12,cores,EfficiencyClass 0; base 1800 MHz
+0,topology,,pe_clock_ratio,1.43,x,serial integer-multiply chain; P 1290-1320 vs E 900-916 Mops
+0,topology,,pe_fp_ratio,0.98,x,serial FP chain does NOT separate the classes
+4,scaling_compute,1,time,0.176,s,unpinned; single-thread turbo ~5.2 GHz
+4,scaling_compute,2,speedup,1.99,x,efficiency 99%
+4,scaling_compute,4,speedup,3.82,x,efficiency 95%
+4,scaling_compute,8,speedup,7.30,x,efficiency 91%
+4,scaling_compute,16,speedup,9.95,x,efficiency 62%
+4,scaling_compute,20,speedup,14.87,x,efficiency 74%; PEAK -- one thread per physical core
+4,scaling_compute,21,speedup,9.76,x,efficiency 46%; abrupt oversubscription cliff
+4,scaling_compute,32,speedup,12.21,x,efficiency 38%; never recovers past 20
+4,scaling_compute,20,speedup_run2,15.35,x,repeat run; peak again at 20 threads
+4,scaling_memory,1,bandwidth,18.4,GB/s,512 MiB streaming reduction
+4,scaling_memory,8,bandwidth,51.4,GB/s,
+4,scaling_memory,16,bandwidth,79.2,GB/s,
+4,scaling_memory,19,bandwidth,82.0,GB/s,PEAK; effectively saturated from ~16 threads
+4,scaling_memory,32,bandwidth,81.6,GB/s,
+4,scaling_bend,,bend_thread_count,20,threads,equals BOTH the physical and logical count -- they are the same here
+4,scaling_compute_long,20,speedup,14.94,x,COMPUTE_ITERS x10 diagnostic; confirms the bend at 20 is real
+4,scaling_compute_long,1,time,1.743,s,COMPUTE_ITERS 4000M instead of 400M; memory kernel unchanged
+4,smt_4t_4cores,4,time,0.046,s,pinned CPUs 0/1/6/7 mask 0xC3; speedup 3.84x eff 96%; 40.1 GB/s
+4,smt_4t_2cores,4,time,0.089,s,pinned CPUs 0/1 mask 0x3; speedup 2.00x eff 50%; 26.9 GB/s
+4,smt_ratio,4,ratio,1.93,x,"THE CONTROLLED MEASUREMENT: 2-core time / 4-core time. 2.0 = second thread on a core adds nothing. No SMT on this CPU, so 1.93 is the no-SMT endpoint, not an SMT cost."
+4,pcore_compute,1,time,0.176,s,pinned CPU 0
+4,ecore_compute,1,time,0.177,s,pinned CPU 2; ratio 0.99 of a P-core (M1: 0.50)
+4,pcore_memory,1,bandwidth,17.7,GB/s,pinned CPU 0
+4,ecore_memory,1,bandwidth,18.0,GB/s,pinned CPU 2; ratio 1.02 (M1: 0.18)
+4,pcore_compute_4t,4,time,0.046,s,4 P-cores mask 0xC3; speedup 3.84x
+4,ecore_compute_4t,4,time,0.044,s,4 E-cores mask 0x3C; speedup 4.01x; E-cores 4% FASTER
+4,pcore_compute_8t,8,time,0.026,s,all 8 P-cores mask 0xC03C3; speedup 6.67x eff 83%; 52.1 GB/s
+4,ecore_compute_8t,8,time,0.023,s,8 E-cores mask 0x3C3C; speedup 7.62x eff 95%; 54.2 GB/s
+4,ecore_ratio_8t,8,ratio,1.13,x,"8 E-cores beat 8 P-cores on this kernel. The 'half the cores are small ones' story does not hold for scaling.c's compute kernel on this chip: at -O2 GCC emits a scalar single-accumulator mulsd/addsd chain, so throughput is FP-add latency bound and blind to core width."
+4,scaling_browser,16,speedup,14.10,x,"Edge 148 file:// ; sweep capped at min(2*HC,16)=16 < 20 cores so it never reaches the bend"
+4,scaling_browser,1,time,247,ms,baseline inflated by JIT/turbo -- 2-4 workers report 108-111% efficiency
+4,scaling_browser,8,speedup,7.78,x,efficiency 97%
+1,taskgraph,,work_T1,5.20,s,sum of all ten task durations
+1,taskgraph,,span_Tinf,2.75,s,checkout->compile_a->link->unit_test->package
+1,taskgraph,,parallelism,1.9,workers,T1/Tinf
+1,taskgraph,1,makespan,5.27,s,
+1,taskgraph,2,makespan,3.52,s,
+1,taskgraph,3,makespan,2.81,s,pins to span here
+1,taskgraph,4,makespan,2.81,s,
+1,taskgraph,6,makespan,2.82,s,
+1,taskgraph,8,makespan,2.81,s,speedup 1.85x efficiency 23%
+1,taskgraph_browser,8,makespan,2770,ms,Edge 148 same machine; speedup 1.88x
+2,imbalance_block,8,makespan,2.746,s,imbalance 1.85 idle 45.9%
+2,imbalance_cyclic,8,makespan,1.414,s,imbalance 1.00 idle 0.5%
+2,imbalance_dyn64,8,makespan,1.542,s,imbalance 1.11 idle 10.0%
+2,imbalance_dyn1,8,makespan,1.393,s,imbalance 1.00 idle 0.2%
+2,imbalance_block,20,makespan,1.315,s,imbalance 2.03 idle 50.8%
+2,imbalance_cyclic,20,makespan,0.717,s,imbalance 1.02 idle 4.2%
+2,imbalance_dyn64,20,makespan,0.869,s,imbalance 1.27 idle 22.3%
+2,imbalance_dyn1,20,makespan,0.933,s,"imbalance 1.01 idle 1.3%; SLOWER than cyclic at 20 threads -- 20 threads contending on one queue mutex. Extra teaching point."
+2,imbalance_browser_block,8,makespan,266,ms,imbalance 1.83
+2,imbalance_browser_dyn64,8,makespan,189,ms,imbalance 1.11; 1.41x over block
+2,imbalance_browser_dyn8,8,makespan,166,ms,imbalance 1.03; 1.60x over block
+3,counter_naive,8,surviving_increments,2911282,of 16000000,"range 2.91-4.21 M over five runs = 18-26% survive; INCS=2000000 default, NOT the 40 M used for the M1 row -- check before comparing"
+3,counter_mutex,8,cost_per_increment,51,ns,0.813 s for 16 M; correct every run
+3,counter_atomic,8,cost_per_increment,10,ns,0.163 s for 16 M; ~5x cheaper than the mutex
+3,counter_private,8,cost_per_increment,0.2,ns,0.003 s for 16 M; effectively free
+3,pipeline,2,throughput,0.12,M items/s,buffer 1; producer blocked 199999 times
+3,pipeline,2,throughput,0.95,M items/s,buffer 8
+3,pipeline,2,throughput,7.54,M items/s,buffer 64
+3,pipeline,2,throughput,7.23,M items/s,buffer 512; producer blocked 699 times; plateau from 64
+3,deadlock_bad,2,outcome,hang,,watchdog fires at 3 s; exit 2 -- correct
+3,deadlock_good,2,outcome,false_deadlock,,"WINDOWS BUG IN THE LAB: reports DEADLOCK and exits 2 although nothing is deadlocked. usleep(1000) actually takes 15.696 ms on Windows (system timer tick), so the ordered path needs 5.80 s and always trips the 3 s watchdog. With the watchdog raised to 60 s it completes correctly in 5.42 s: A=1000 B=1000 total=2000. Fix before students run this on Windows."
+3,usleep_granularity,,actual_duration,15.696,ms,for a requested 1000 us; usleep(100) returns immediately

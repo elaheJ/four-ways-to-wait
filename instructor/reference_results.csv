@@ -1,0 +1,62 @@
+# Reference measurements for "Four Ways to Wait" (EduHPC-2026 short paper).
+# Device: Apple M1, 4 performance + 4 efficiency cores, 8 GB, macOS 26.5,
+#         Apple clang 21.0.0, cc -O2. Timings are wall clock, CLOCK_MONOTONIC.
+# Harnesses discard a warm-up pass and report best-of-three unless noted.
+#
+# SECOND MACHINE: see reference_results_x86.csv (Intel Core Ultra 7 265, 20 cores,
+# no SMT, hybrid 8P+12E, Windows 11, GCC 16.1). Labs 1-3 reproduce there; Lab 4
+# does NOT -- that machine values an efficiency core at 0.99 of a performance core
+# on the same kernel where the M1 says 0.50, because the compiled loop is
+# FP-latency bound and blind to core width. Absolute times are not comparable
+# across the two machines (different compilers); ratios within a machine are.
+lab,workload,threads,metric,value,unit,note
+1,taskgraph,,work_T1,5.20,s,sum of all ten task durations
+1,taskgraph,,span_Tinf,2.75,s,checkout->compile_a->link->unit_test->package
+1,taskgraph,,parallelism,1.89,workers,T1/Tinf
+1,taskgraph,1,makespan,5.29,s,
+1,taskgraph,2,makespan,3.53,s,
+1,taskgraph,3,makespan,2.83,s,pins to span here
+1,taskgraph,4,makespan,2.82,s,
+1,taskgraph,6,makespan,2.83,s,
+1,taskgraph,8,makespan,2.81,s,speedup 1.85x efficiency 23%
+1,taskgraph_browser,8,makespan,2756,ms,headless Chrome 151 same machine; speedup 1.89x
+2,imbalance_block,1,makespan,31.897,s,baseline for all lab-2 speedups
+2,imbalance_block,2,makespan,23.948,s,imbalance 1.49 idle 33.0%
+2,imbalance_block,4,makespan,14.870,s,imbalance 1.73 idle 42.1%
+2,imbalance_block,8,makespan,8.516,s,imbalance 1.78 idle 43.7% speedup 3.75x
+2,imbalance_cyclic,2,makespan,16.505,s,imbalance 1.00
+2,imbalance_cyclic,4,makespan,8.666,s,imbalance 1.00
+2,imbalance_cyclic,8,makespan,5.479,s,imbalance 1.01 idle 1.2% speedup 5.82x
+2,imbalance_dyn64,8,makespan,5.626,s,imbalance 1.10 idle 8.7% speedup 5.67x
+2,imbalance_dyn1,8,makespan,5.250,s,imbalance 1.00 idle 0.1% speedup 6.08x
+2,imbalance_browser_block,8,makespan,554,ms,imbalance 1.77
+2,imbalance_browser_dyn64,8,makespan,358,ms,imbalance 1.11
+2,imbalance_browser_dyn8,8,makespan,333,ms,imbalance 1.02; 1.67x over block
+3,counter_naive,2,surviving_increments,40005921,of 80000000,non-deterministic
+3,counter_naive,4,surviving_increments,40620132,of 160000000,non-deterministic
+3,counter_naive,8,surviving_increments,65197641,of 320000000,range 65.1-78.0 M over five runs
+3,counter_mutex,1,throughput,110.5,M inc/s,0.362 s for 40 M
+3,counter_mutex,2,throughput,67.1,M inc/s,speedup 0.61x
+3,counter_mutex,4,throughput,31.9,M inc/s,speedup 0.29x
+3,counter_mutex,8,throughput,33.3,M inc/s,speedup 0.30x -- the engineered null
+3,counter_atomic,1,throughput,143.9,M inc/s,
+3,counter_atomic,8,throughput,25.7,M inc/s,speedup 0.18x
+3,counter_private,8,cost_per_increment,0.119,ns,vs 30 ns for mutex; 250x cheaper
+3,pipeline,2,throughput,0.30,M items/s,buffer 1; producer blocked 199995 times
+3,pipeline,2,throughput,2.03,M items/s,buffer 8
+3,pipeline,2,throughput,16.66,M items/s,buffer 64
+3,pipeline,2,throughput,20.80,M items/s,buffer 512; producer blocked 372 times
+3,deadlock_bad,2,outcome,hang,,watchdog fires at 3 s; exit 2
+3,deadlock_good,2,outcome,complete,,invariant A+B=2000 preserved
+4,scaling_compute,1,time,0.378,s,
+4,scaling_compute,2,speedup,1.93,x,efficiency 97%
+4,scaling_compute,4,speedup,3.73,x,efficiency 93%
+4,scaling_compute,8,speedup,5.45,x,efficiency 68%
+4,scaling_compute,16,speedup,5.53,x,efficiency 35%; wall clock flat from 8
+4,scaling_memory,1,bandwidth,8.4,GB/s,512 MiB streaming reduction
+4,scaling_memory,8,bandwidth,45.1,GB/s,
+4,scaling_memory,16,bandwidth,46.1,GB/s,saturates near 47
+4,ecore_compute,1,time,0.759,s,taskpolicy -b; 0.50 of a performance core
+4,ecore_memory,1,bandwidth,1.5,GB/s,taskpolicy -b
+4,scaling_predicted,8,speedup,6.00,x,rule of thumb 4 + 4*0.50
+4,scaling_browser,8,speedup,5.89,x,headless Chrome 151; flat to 16 workers

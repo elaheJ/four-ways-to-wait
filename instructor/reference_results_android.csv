@@ -1,0 +1,73 @@
+# Android phone reference measurements for "Four Ways to Wait" (EduHPC-2026).
+# Third device, alongside reference_results.csv (Apple M1) and
+# reference_results_x86.csv (Intel Core Ultra 7 265).
+#
+# Device: Android 10, armv81 (ARMv8.1), 8 logical cores reported by
+#         navigator.hardwareConcurrency. Chrome 150.0.0.0 Mobile.
+#         navigator.deviceMemory: NOT reported by this build.
+#         Page served over LAN from the reference Mac (http://<host>:8000/threads.html).
+#         Measured 30 July 2026. TWO sessions: run 1 on battery (60%),
+#         run 2 on charge (57%). Both are recorded below.
+#
+# THE HEADLINE, and what survives repetition. The phone reports 8 threads and
+# peaks at 3.17x-4.15x. It never comes close to 8. In BOTH sessions the fifth
+# worker was slower in absolute terms than the fourth (171->203 ms run 1,
+# 294->342 ms run 2), which is the signature of a 4+4 big.LITTLE part: the first
+# four workers get the big cores, the fifth gets a little one, and the even split
+# hands it the same work anyway.
+#
+# WHAT DOES NOT REPRODUCE, and must not be quoted as if it did:
+#   - the magnitudes. Peak 4.15x (run 1) vs 3.17x (run 2) -- a spread of 1.31x on
+#     the same device, same page, 15 minutes apart.
+#   - the chunk-size ordering in section 3. Run 1: chunk 64 beat chunk 8.
+#     Run 2: chunk 8 beat chunk 64. It is noise; do not build a lesson on it.
+#   - run 2 shows 2 workers SLOWER than 1 (606 -> 647 ms). Nothing structural
+#     causes that; it is the noise floor of the device.
+#
+# COUNTER-INTUITIVE: run 2 was on charge and was the NOISIER of the two.
+# Charging heats the phone. The handout's original "plug it in" advice has been
+# removed from threads.html for this reason.
+#
+# Robust: where the curve bends, and which worker made things worse.
+# Not robust: any particular millisecond.
+lab,workload,threads,metric,value,unit,note
+0,topology,,reported_threads,8,threads,navigator.hardwareConcurrency
+0,topology,,platform,armv81,,"Linux armv81; Android 10; Chrome 150 Mobile"
+0,topology,,device_memory,,,not reported by this Chrome build
+4,scaling_browser,1,time,531,ms,baseline
+4,scaling_browser,2,speedup,1.73,x,efficiency 87%
+4,scaling_browser,3,speedup,2.57,x,efficiency 86%
+4,scaling_browser,4,speedup,3.11,x,efficiency 78%; LAST GOOD POINT -- the knee
+4,scaling_browser,5,speedup,2.62,x,"efficiency 52%; 203 ms -- SLOWER THAN 4 WORKERS (171 ms). Adding a worker cost time."
+4,scaling_browser,6,speedup,3.05,x,efficiency 51%; 174 ms
+4,scaling_browser,7,speedup,3.44,x,efficiency 49%; 155 ms
+4,scaling_browser,8,speedup,3.57,x,efficiency 45%; 149 ms -- at the reported thread count
+4,scaling_browser,10,speedup,4.07,x,efficiency 41%; 131 ms
+4,scaling_browser,14,speedup,4.16,x,efficiency 30%; 128 ms -- PEAK
+4,scaling_browser,16,speedup,4.14,x,efficiency 26%; 128 ms
+4,scaling_bend,,bend_worker_count,4,workers,"vs 8 reported threads. M1 bends at 8 of 8; Core Ultra at 20 of 20; this phone at 4 of 8."
+4,scaling_peak,,peak_speedup,4.16,x,on a device reporting 8 threads
+2,imbalance_browser_block,8,makespan,705,ms,busiest 663 idlest 216; imbalance 1.48
+2,imbalance_browser_dyn64,8,makespan,612,ms,busiest 583 idlest 513; imbalance 1.07; 1.15x over block
+2,imbalance_browser_dyn8,8,makespan,644,ms,"busiest 584 idlest 563; imbalance 1.02; 1.10x over block. Loses to chunk 64 here and beats it in run 2 -- the ordering is noise, see header."
+1,taskgraph_browser,1,makespan,5222,ms,work T1 5200 ms; span 2750 ms; parallelism 1.9
+1,taskgraph_browser,2,makespan,3475,ms,speedup 1.50x efficiency 75%
+1,taskgraph_browser,3,makespan,2782,ms,speedup 1.87x efficiency 62%; pins to the span here
+1,taskgraph_browser,4,makespan,2776,ms,speedup 1.87x efficiency 47%
+1,taskgraph_browser,6,makespan,2781,ms,speedup 1.87x efficiency 31%
+1,taskgraph_browser,8,makespan,2777,ms,"speedup 1.87x efficiency 23%; within 1% of the M1 (1.85x) and the Core Ultra (1.88x) -- the span bound is architecture-independent, as it must be"
+# ---- run 2, on charge, 15 minutes after run 1 ----
+4,scaling_browser_run2,1,time,606,ms,baseline
+4,scaling_browser_run2,2,speedup,0.94,x,"647 ms -- SLOWER THAN ONE WORKER. Noise floor, not a result."
+4,scaling_browser_run2,3,speedup,1.42,x,426 ms
+4,scaling_browser_run2,4,speedup,2.06,x,294 ms; local knee again
+4,scaling_browser_run2,5,speedup,1.77,x,342 ms -- slower than 4 workers, as in run 1
+4,scaling_browser_run2,8,speedup,2.79,x,217 ms; at the reported thread count
+4,scaling_browser_run2,10,speedup,3.17,x,191 ms -- PEAK (run 1 peaked at 4.15x)
+4,scaling_browser_run2,16,speedup,2.59,x,234 ms
+4,scaling_peak_run2,,peak_speedup,3.17,x,vs 4.15x in run 1; spread 1.31x between sessions
+2,imbalance_browser_block_run2,8,makespan,1131,ms,busiest 1076 idlest 74; imbalance 1.74 (run 1: 1.48)
+2,imbalance_browser_dyn64_run2,8,makespan,1083,ms,imbalance 1.13; only 1.04x over block
+2,imbalance_browser_dyn8_run2,8,makespan,1023,ms,"imbalance 1.05; 1.11x over block. BEATS chunk 64 here; in run 1 it lost to it. Ordering is noise."
+1,taskgraph_browser_run2,3,makespan,2769,ms,speedup 1.88x
+1,taskgraph_browser_run2,8,makespan,2780,ms,"speedup 1.87x -- identical to run 1 and to both laptops. The span bound is the one number on this device that does not move."

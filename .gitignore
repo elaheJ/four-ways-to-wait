@@ -1,0 +1,16 @@
+*.o
+*.exe
+lab2_mapping/imbalance
+lab3_sync/counter
+lab3_sync/deadlock
+lab3_sync/pipeline
+lab4_hardware/scaling
+lab4_hardware/probe
+__pycache__/
+.DS_Store
+
+# Author working documents, not part of the artifact
+*.docx
+
+# Instructor answer key — deliberately NOT published; see instructor/concept-inventory.md
+instructor/concept-inventory.md
