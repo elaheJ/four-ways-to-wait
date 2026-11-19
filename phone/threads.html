@@ -45,8 +45,10 @@ If threads were free, the bar would double every time you double the workers.</p
 
 <h2>3. The same loop, handed out two different ways</h2>
 <p class="note">4096 iterations where iteration <em>i</em> costs about <em>i</em> — the last one
-is thousands of times more expensive than the first. Same total work both times.
-<strong>Block</strong> cuts the range into contiguous slabs up front. <strong>Dynamic</strong>
+is thousands of times more expensive than the first. Same total work every time.
+<strong>Block</strong> cuts the range into contiguous slabs up front. <strong>Cyclic</strong>
+also decides up front, but deals iterations out in turns: worker <em>k</em> gets
+<em>k</em>, <em>k</em>+<em>p</em>, <em>k</em>+2<em>p</em>, and so on. <strong>Dynamic</strong>
 makes each worker come back for a small chunk whenever it runs out.</p>
 <button id="runSched">Run both schedules</button>
 <div id="schedOut"></div>
@@ -72,6 +74,11 @@ onmessage = (e) => {
     const t0 = performance.now();
     for (let i = m.lo; i < m.hi; i++) sink += burn(i * 250);
     postMessage({ done: 'chunk', ms: performance.now() - t0, n: m.hi - m.lo });
+  } else if (m.job === 'stride') {              // lo, lo+step, lo+2*step, ... below n
+    const t0 = performance.now();
+    let c = 0;
+    for (let i = m.lo; i < m.n; i += m.step) { sink += burn(i * 250); c++; }
+    postMessage({ done: 'chunk', ms: performance.now() - t0, n: c });
   } else if (m.job === 'task') {                // a task-graph node of known duration
     const end = performance.now() + m.ms;
     while (performance.now() < end) sink += burn(2000);
@@ -165,6 +172,18 @@ function blockRun(p) {
   });
 }
 
+function cyclicRun(p) {
+  return new Promise(res => {
+    // Static round robin: worker k gets k, k+p, k+2p, ... One message each, like block.
+    const ws = spawn(p), busy = new Array(p).fill(0);
+    let left = p; const t0 = performance.now();
+    ws.forEach((w, k) => {
+      w.onmessage = (ev) => { busy[k] += ev.data.ms; if (--left === 0) { kill(ws); res({ ms: performance.now() - t0, busy }); } };
+      w.postMessage({ job: 'stride', lo: k, step: p, n: N });
+    });
+  });
+}
+
 function dynamicRun(p, chunk) {
   return new Promise(res => {
     // The main thread is the work queue. A worker gets more only when it asks.
@@ -183,8 +202,10 @@ el('runSched').onclick = async (e) => {
   e.target.disabled = true;
   const p = Math.max(2, Math.min(HC, 8));
   const runs = [['block (static)', await blockRun(p)],
+                ['cyclic (static)', await cyclicRun(p)],
                 ['dynamic, chunk 64', await dynamicRun(p, 64)],
-                ['dynamic, chunk 8', await dynamicRun(p, 8)]];
+                ['dynamic, chunk 8', await dynamicRun(p, 8)],
+                ['dynamic, chunk 1', await dynamicRun(p, 1)]];
   const base = runs[0][1].ms;
   el('schedOut').innerHTML = table(
     ['schedule', 'makespan', 'busiest', 'idlest', 'imbalance', 'vs block'],
